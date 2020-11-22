@@ -13,19 +13,83 @@ gcc producer-consumer.c -lpthread
 ./a.out
 ```
 
-#### 실행 결과(출력)
-* 서버 프로그램을 실행하면 mkfifo를 통해 fifo를 생성하고, client에서 server로 흐르는 fifo, server에서 client로 흐르는 fifo2개가 만들어지고 서버에서 client2server를 열고 클라이언트에서 client2server를 엶으로써 연결이 된다. server2client fifo도 마찬가지로 연결이 된다.
-* server on.이 출력이되고 현재 프로세스의 번호를 보여준다.
-* 클라이언트에서 입력받은 하나의 스트링을 " " 토큰으로 잘라서 파일이름, 요청 목적, read면 읽을 바이트 수, write면 입력할 스트링을 구조체에 저장한다.
-* 클라이언트에게서 exit를 입력받게되면 서버를 종료한다.
-* 서버에서 요청에 따라 응답하는 내용은 다음과 같다.
-  * 요청받은 byte수 만큼 읽기(파일의 내용이 byte수 보다 작으면 전부 읽는다.)
-  * write시 파일에 쓴 바이트 수를 응답
-  * 만약 파일을 여는 도중에 오류가 발생시, 오류가 났음을 알리는 응답
-  * 서버 종료 요청(exit)시 서버 종료 확인 응답
-  
-  
-  
+### 3. 코드 설명
+```C
+pthread_t prod[5],cons[5];
+sem_init(&empty,0,FULL);
+sem_init(&full,0,0);
+sem_init(&mutex,0,1);
+```
+* 쓰레드, 세마포 생성
+
+```C
+for(i;i<5;i++){
+	if(createrr=pthread_create(&prod[i],NULL,(void *)producer,(void *)i)){
+		printf("create err\nprogram exit...\n\n");
+	exit(1);
+	}
+}
+for(i=0;i<5;i++){
+	if(createrr=pthread_create(&cons[i],NULL,(void *)consumer,(void *)i)){
+		printf("create err\nprogram exit...\n\n");
+		exit(1);
+	}
+}
+	for(i=0;i<5;i++){
+	pthread_join(prod[i],NULL);
+}
+//printf("producer join");
+for(i=0;i<5;i++){
+	pthread_join(cons[i],NULL);
+}
+```
+* 멀티쓰레드 생성
+   * pthread헤더에 있는 pthread_create함수와 pthread_join함수를 이용하여 구현하였음
+   
+   
+```C
+sem_destroy(&mutex);
+sem_destroy(&empty);
+sem_destroy(&full);
+```
+* 멀티쓰레드 완료후 세마포 제거
+
+```C
+sem_wait(&empty);
+sem_wait(&mutex);
+b=stock;
+b++;
+stock=b;
+printf("stock+ : %d\n",stock);
+count_producer++;
+sem_post(&mutex);
+sem_post(&full);
+```
+* producer (void*)형 함수
+   * semaphore empty, full, mutex를 이용
+   * empty 참조 값이 양수면 그 값을 1감소하고 empty 세마포를 잠근다.
+   * mutex역시 값을 1감소하고 잠근다.
+   * stock 생산 코드를 수행하고나서 mutex값을 1증가하고 잠금을 해제한다.
+   * full 참조 값이 20미만이면 그 값을 1증가하고 consumer의 full잠금을 해제한다.
+
+```C
+sem_wait(&full);
+sem_wait(&mutex);
+b=stock;
+b--;
+stock=b;
+printf("%d : %d\n",(int*)n,stock);
+count_consumer++;
+sem_post(&mutex);
+sem_post(&empty);
+```
+* consumer (void*)형 함수
+   * semaphore empty, full, mutex를 이용
+   * full 참조 값이 양수면 그 값을 1감소하고 full 세마포를 잠근다.
+   * mutex는 producer와 같은방식으로 작동한다.
+   * empty 참조 값이 20미만이면 그 값을 1증가하고 producer의 empty잠금을 해제한다.
+   
+   
 ## Reader-Writer
 ### 1. 원천코드(reader-writer.c)를 이용해 컴파일
 ```C
@@ -40,40 +104,72 @@ gcc reader-writer.c -lpthread
 ./a.out
 ```
 
-#### 실행 결과(출력)
-* 클라이언트 프로그램을 실행하면 server과 fifo를 연결하고 연결이 실패하면 오류 메세지를 출력하고 프로그램을 종료한다.
-* 클라이언트 프로그램을 이용하여 서버에게 보내는 요청은 다음과 같다.
-  * 파일이름(exit)
-  * 파일요청타입(r/w)
-  * 타입이 r일 경우 읽을 바이트수|타입이 w일 경우 파일에 입력할 스트링
-* 요청후 서버에서 받아와서 출력하는 결과는 다음과 같다
-  * 읽은 파일 내용
-  * 파일에 쓴 스트링의 바이트 수
-  * read혹은 write오류메세지
-  * 서버 종료 확인 메세지
-  
-#### 예시 입력(쓰기)
+### 3. 코드 설명
 ```C
-txt.txt
-w
-abcdef
+pthread_t read[10],write[5];
+	sem_init(&mutex,0,1);
+	sem_init(&wrt,0,1)
 ```
-#### 예시 출력(쓰기)
-```C
-Written byte: 6
-```
+* 초기 쓰레드, 세마포어 생성
 
-#### 예시 입력(읽기)
 ```C
-txt.txt
-r
-6
+for(i=0;i<10;i++){
+		if(createrr=pthread_create(&read[i],NULL,(void *)reader,(void *)i)){
+			printf("create err\nprogram exit...\n\n");
+			exit(1);
+		}
+	}
+	for(i=0;i<5;i++){
+		if(createrr=pthread_create(&write[i],NULL,(void *)writer,(void *)i)){
+			printf("create err\nprogram exit...\n\n");
+			exit(1);
+		}
+	}
+	
+	for(i=0;i<5;i++){
+		pthread_join(read[i],NULL);
+	}
+	//printf("reader join\n");
+	
+	for(i=0;i<5;i++){
+		pthread_join(write[i],NULL);
+	}
+	//printf("writer join\n");
+	//printf("end stock : %d\n",stock);	
+	sem_destroy(&mutex);
+	sem_destroy(&wrt);
 ```
-#### 예시 출력(쓰기)
+* 멀티쓰레드 create, join해주기
+
 ```C
-Read:abcdef
+sem_wait(&wrt);
+	count++;
+	printf("%dth writer : %d\n",(int*)n,count);
+	sem_post(&wrt);
 ```
-#### 예시 입력(종료)
+* writer (void *)형 함수
+   * wrt의 참조 값을 생성과 동시에 1로 초기화 하였고
+   * 그 값을 1감소시키며 잠구었다.
+   * 풀기 전까지 쓰는 기능을 수행한다.
+  
 ```C
-exit
+sem_wait(&mutex);
+	num++;
+	if(num==1){
+		sem_wait(&wrt);
+	}
+	sem_post(&mutex);
+	printf("%dth reader reads: %d\n",(int*)n,count);
+	sem_wait(&mutex);
+	num--;
+	if(num==0){
+		sem_post(&wrt);
+	}
+	sem_post(&mutex);
 ```
+* reader (void *)형 함수
+   * writer가 쓴 값에 접근하려고 하는 첫 번째 reader가 실행이되면
+   * 전역 변수 num의 값을 1증가시키고 1일때 wrt세마포어의 참조값을 1감소시키고 잠근다.
+   * 읽기가 끝나고나면 num값을 1감소 시키는데 이때 num의 값이 0이 되면
+   * wrt세마포어의 참조 값을 1증가시키고 잠금을 해제한다.
+   * wrt의 잠금을 해제하기 전 까지는 writer가 값을 변경하는 것이 불가능하다.
